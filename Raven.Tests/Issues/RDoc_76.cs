@@ -16,6 +16,7 @@ namespace Raven.Tests.Issues
 		private class Room
 		{
 			public string Sth { get; set; }
+            public int SomeInteger { get; set; }
 		}
 
 		private class Kitchen : Room
@@ -190,6 +191,34 @@ namespace Raven.Tests.Issues
 				Assert.NotNull(mb);
 			}
 		}
+
+        [Fact]
+        public void RegisteringConventionShouldWorkOnLoad()
+        {
+            using (var store = NewDocumentStore())
+            {
+                store.Conventions.RegisterIdConvention<Bedroom>((dbName, cmds, r) => "b/" + r.SomeInteger);
+                store.Conventions.RegisterIdConvention<Room>((dbName, cmds, r) => "r/" + r.SomeInteger);
+                store.Conventions.RegisterIdLoadConvention<Bedroom, int>(id => "b/" + id);
+                store.Conventions.RegisterIdLoadConvention<Room, int>(id => "r/" + id);
+
+                using (var session = store.OpenSession())
+                {
+                    session.Store(new Bedroom { Sth = "3", SomeInteger = 12});
+                    session.Store(new Room { Sth = "4", SomeInteger = 14});
+                    session.SaveChanges();
+                }
+
+                using (var session = store.OpenSession())
+                {
+                    var br = session.Load<Bedroom>(12);
+                    var r = session.Load<Room>(14);
+
+                    Assert.NotNull(br);
+                    Assert.NotNull(r);
+                }
+            }
+        }
 
 		[Fact]
 		public void RegisteringConventionForSameTypeShouldOverrideOldOneAsync()

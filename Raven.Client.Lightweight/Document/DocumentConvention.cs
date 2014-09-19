@@ -53,6 +53,8 @@ namespace Raven.Client.Document
 #if !SILVERLIGHT
 		private readonly IList<Tuple<Type, Func<string, IDatabaseCommands, object, string>>> listOfRegisteredIdConventions =
 			new List<Tuple<Type, Func<string, IDatabaseCommands, object, string>>>();
+        private readonly IList<Tuple<Type, Func<object, string>>> listOfRegisteredIdLoadConventions =
+            new List<Tuple<Type, Func<object, string>>>();
 #endif
 		private readonly IList<Tuple<Type, Func<string, IAsyncDatabaseCommands, object, Task<string>>>> listOfRegisteredIdConventionsAsync =
 			new List<Tuple<Type, Func<string, IAsyncDatabaseCommands, object, Task<string>>>>();
@@ -153,6 +155,14 @@ namespace Raven.Client.Document
 		///<returns></returns>
 		public string DefaultFindFullDocumentKeyFromNonStringIdentifier(object id, Type type, bool allowNull)
 		{
+#if !SILVERLIGHT
+			foreach (var typeToRegisteredIdLoadConvention in listOfRegisteredIdLoadConventions
+				.Where(typeToRegisteredIdConvention => typeToRegisteredIdConvention.Item1.IsAssignableFrom(type)))
+			{
+				return typeToRegisteredIdLoadConvention.Item2(id);
+			}
+#endif
+
 			var converter = IdentityTypeConvertors.FirstOrDefault(x => x.CanConvertFrom(id.GetType()));
 			var tag = GetTypeTagName(type);
 			if (tag != null)
@@ -500,6 +510,32 @@ namespace Raven.Client.Document
 
 			return this;
 		}
+
+        public DocumentConvention RegisterIdLoadConvention<TEntity,TKey>(Func<TKey, string> func)
+            where TKey: struct
+        {
+            if (!typeof (TKey).IsValueType)
+                throw new InvalidOperationException("Tkey is not value type");
+
+            var type = typeof(TEntity);
+            var entryToRemove = listOfRegisteredIdLoadConventions.FirstOrDefault(x => x.Item1 == type);
+            if (entryToRemove != null)
+                listOfRegisteredIdLoadConventions.Remove(entryToRemove);
+
+            int index;
+            for (index = 0; index < listOfRegisteredIdLoadConventions.Count; index++)
+            {
+                var entry = listOfRegisteredIdLoadConventions[index];
+                if (entry.Item1.IsAssignableFrom(type))
+                    break;
+            }
+
+            var item = new Tuple<Type, Func<object, string>>(typeof(TEntity), o => func((TKey)o));
+            listOfRegisteredIdLoadConventions.Insert(index, item);
+
+            return this;
+        }
+
 #endif
 
 		/// <summary>
